@@ -46,6 +46,7 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "ai-jsx": "^0.5.3",
     "eventsource-parser": "1.0.0",
     "nanoid": "^3.3.6",
     "sswr": "^1.10.0",

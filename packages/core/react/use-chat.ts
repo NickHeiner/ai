@@ -2,6 +2,7 @@ import { useCallback, useId, useRef, useEffect, useState } from 'react'
 import useSWRMutation from 'swr/mutation'
 import useSWR from 'swr'
 import { nanoid, decodeAIStreamChunk } from '../shared/utils'
+import { fromStreamResponse } from 'ai-jsx/stream'
 
 import type { Message, CreateMessage, UseChatOptions } from '../shared/types'
 export type { Message, CreateMessage, UseChatOptions }
@@ -149,32 +150,64 @@ export function useChat({
         let result = ''
         const createdAt = new Date()
         const replyId = nanoid()
-        const reader = res.body.getReader()
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) {
-            break
+
+        const isAIJSXStream = res.headers.get('x-powered-by') === 'ai-jsx';
+        if (isAIJSXStream) {
+          const frameStream = fromStreamResponse(res.body).getReader()
+          while (true) {
+            const { done, value } = await frameStream.read()
+            if (done) {
+              break
+            }
+            // Update the chat state with the new message tokens.
+            mutate(
+              [
+                ...messagesSnapshot,
+                {
+                  id: replyId,
+                  createdAt,
+                  content: value,
+                  role: 'assistant'
+                }
+              ],
+              false
+            )
+  
+            // The request has been aborted, stop reading the stream.
+            if (abortControllerRef.current === null) {
+              frameStream.cancel()
+              break
+            }
           }
-          // Update the chat state with the new message tokens.
-          result += decodeAIStreamChunk(value)
-          mutate(
-            [
-              ...messagesSnapshot,
-              {
-                id: replyId,
-                createdAt,
-                content: result,
-                role: 'assistant'
-              }
-            ],
-            false
-          )
-
-          // The request has been aborted, stop reading the stream.
-          if (abortControllerRef.current === null) {
-            reader.cancel()
-            break
+        } else {
+          const reader = res.body.getReader()
+  
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) {
+              break
+            }
+            // Update the chat state with the new message tokens.
+            result += decodeAIStreamChunk(value)
+            mutate(
+              [
+                ...messagesSnapshot,
+                {
+                  id: replyId,
+                  createdAt,
+                  content: result,
+                  role: 'assistant'
+                }
+              ],
+              false
+            )
+  
+            // The request has been aborted, stop reading the stream.
+            if (abortControllerRef.current === null) {
+              reader.cancel()
+              break
+            }
           }
         }
 
@@ -202,6 +235,7 @@ export function useChat({
 
         throw err
       }
+
     },
     {
       populateCache: false,

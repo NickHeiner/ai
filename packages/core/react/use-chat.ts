@@ -167,7 +167,7 @@ export function useChat({
                 {
                   id: replyId,
                   createdAt,
-                  content: value as unknown as string,
+                  content: value.join('') as unknown as string,
                   role: 'assistant'
                 }
               ],
